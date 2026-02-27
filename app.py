@@ -171,71 +171,64 @@ else:
 
     # Вкладка 2: Загрузка файлов
     with tab2:
-        st.subheader("📂 Guruh monitoringi va natijalarni eksport qilish")
+        st.subheader("📂 Guruh monitoringi")
         uploaded_file = st.file_uploader("Faylni tanlang (Excel yoki CSV)", type=["csv", "xlsx"])
         
         if uploaded_file:
-            if uploaded_file.name.endswith('.csv'):
-                df_batch = pd.read_csv(uploaded_file)
-            else:
-                df_batch = pd.read_excel(uploaded_file)
-            
-            # Колонки для ИИ (числовые)
-            req_cols = ['Age', 'Gender', 'Scholarship', 'Tuition_Paid', 'Living_Status', 
-                        'Attendance_Rate', 'GPA', 'Academic_Failures', 'Online_Activity']
-            
-            # Проверяем наличие колонки с именем (может называться Full_Name, ФИО или Имя)
-            name_col = next((c for c in df_batch.columns if c.lower() in ['full_name', 'fio', 'ism', 'имя', 'фио']), None)
+            try:
+                # 1. Загрузка файла
+                if uploaded_file.name.endswith('.csv'):
+                    df_batch = pd.read_csv(uploaded_file)
+                else:
+                    df_batch = pd.read_excel(uploaded_file)
+                
+                # 2. Список необходимых колонок
+                req_cols = ['Age', 'Gender', 'Scholarship', 'Tuition_Paid', 'Living_Status', 
+                            'Attendance_Rate', 'GPA', 'Academic_Failures', 'Online_Activity']
+                
+                # Поиск колонки с ФИО
+                name_col = next((c for c in df_batch.columns if c.lower() in ['full_name', 'fio', 'ism', 'имя', 'фио']), None)
 
-            if all(col in df_batch.columns for col in req_cols):
-                # Очистка данных для модели
-                X_batch = df_batch[req_cols].copy()
-                for col in req_cols:
-                    X_batch[col] = pd.to_numeric(X_batch[col], errors='coerce')
-                X_batch = X_batch.fillna(0)
-                
-                # Прогноз
-                preds = model.predict(X_batch)
-                probs = model.predict_proba(X_batch)[:, 1] * 100
-                
-                # Добавляем результаты в таблицу
-                df_batch['Risk (%)'] = np.round(probs, 1)
-                df_batch['Status'] = ["Xavf ostida" if p == 1 else "Xavfsiz" for p in preds]
-                
-                # --- ПОИСК И ФИЛЬТРАЦИЯ ---
-                search_query = st.text_input("🔍 Talabani ism-sharifi bo'yicha qidirish", "")
-                
-                display_df = df_batch.copy()
-                if search_query and name_col:
-                    display_df = display_df[display_df[name_col].astype(str).str.contains(search_query, case=False)]
-                
-                # Метрики
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Jami talabalar", len(df_batch))
-                m2.metric("Xavf ostidagilar", int(sum(preds)))
-                m3.metric("O'rtacha xavf", f"{np.mean(probs):.1f}%")
-                
-                # Отображение таблицы (ФИО будет первой колонкой, если она есть)
-                cols_to_show = ([name_col] if name_col else []) + ['Risk (%)', 'Status'] + req_cols
-                st.dataframe(display_df[cols_to_show].style.background_gradient(subset=['Risk (%)'], cmap='Reds'), use_container_width=True)
-                
-                # --- ЭКСПОРТ В EXCEL ---
-                st.markdown("### 📥 Hisobotni yuklab olish")
-                
-                # Конвертируем DataFrame в Excel в памяти
-                import io
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_batch.to_excel(writer, index=False, sheet_name='Natijalar')
-                
-                st.download_button(
-                    label="📄 Natijalarni Excel formatida yuklab olish",
-                    data=output.getvalue(),
-                    file_name="dropout_predictions_report.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.error(f"Faylda kerakli ustunlar topilmadi! Talab etiladi: {', '.join(req_cols)}")
+                if all(col in df_batch.columns for col in req_cols):
+                    # --- ИСПРАВЛЕНИЕ ОШИБКИ DType ---
+                    X_batch = df_batch[req_cols].copy()
+                    for col in req_cols:
+                        # Превращаем всё в числа, ошибки заменяем на NaN
+                        X_batch[col] = pd.to_numeric(X_batch[col], errors='coerce')
+                    
+                    # Заполняем пустые места (NaN) средним значением или 0
+                    X_batch = X_batch.fillna(0)
+                    
+                    # 3. Прогноз
+                    preds = model.predict(X_batch)
+                    probs = model.predict_proba(X_batch)[:, 1] * 100
+                    
+                    df_batch['Risk (%)'] = np.round(probs, 1)
+                    df_batch['Status'] = ["Xavf ostida" if p == 1 else "Xavfsiz" for p in preds]
+                    
+                    # 4. Поиск
+                    search_query = st.text_input("🔍 Talabani ism-sharifi bo'yicha qidirish", "")
+                    if search_query and name_col:
+                        df_batch = df_batch[df_batch[name_col].astype(str).str.contains(search_query, case=False)]
+                    
+                    # 5. Метрики
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Jami talabalar", len(df_batch))
+                    m2.metric("Xavf ostidagilar", int(sum(preds)))
+                    m3.metric("O'rtacha xavf", f"{np.mean(probs):.1f}%")
+                    
+                    # 6. Отображение (с проверкой на ошибки стилизации)
+                    cols_to_show = ([name_col] if name_col else []) + ['Risk (%)', 'Status'] + req_cols
+                    try:
+                        st.dataframe(df_batch[cols_to_show].style.background_gradient(subset=['Risk (%)'], cmap='Reds'), use_container_width=True)
+                    except:
+                        # Если градиент вызывает ошибку, выводим простую таблицу
+                        st.dataframe(df_batch[cols_to_show], use_container_width=True)
+                else:
+                    st.error(f"Faylda kerakli ustunlar topilmadi! Talab etiladi: {', '.join(req_cols)}")
+            except Exception as e:
+                st.error(f"Xatolik yuz berdi: {e}")
 
 st.markdown("---")
+
 st.info("Tizim magistrlik dissertatsiyasi doirasida ishlab chiqilgan. Muallif: Farrux Shomirzayev")
