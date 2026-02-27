@@ -11,6 +11,21 @@ st.set_page_config(page_title="DropOUT AI Expert", layout="wide", initial_sideba
 # Кастомный CSS для профессиональных кнопок и вкладок
 st.markdown("""
     <style>
+    /* Выравнивание заголовков и ячеек таблицы */
+    [data-testid="stTable"] th, [data-testid="stTable"] td {
+        text-align: center !important;
+        padding: 10px 15px !important;
+    }
+    
+    /* Исправление смещения в st.dataframe */
+    .stDataFrame div[data-testid="stTable"] {
+        width: 100%;
+    }
+
+    /* Убираем лишние отступы, которые "разрывают" таблицу */
+    .element-container hr {
+        margin: 1rem 0 !important;
+    }
     /* Основной фон страницы */
     .main { background-color: #0e1117; color: #ffffff; }
     
@@ -232,3 +247,4 @@ else:
 st.markdown("---")
 
 st.info("Tizim magistrlik dissertatsiyasi doirasida ishlab chiqilgan. Muallif: Farrux Shomirzayev")
+
